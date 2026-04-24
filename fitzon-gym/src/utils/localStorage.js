@@ -63,6 +63,11 @@ export const getFees = async (month, year) => {
     console.log("response for selected months: ", response.data);
     return response.data;
 };
+export const refund = async (id, month, year) => {
+    const response = await axios.post(`http://localhost:3000/fee/refund?id=${id}&month=${month}&year=${year}`)
+    console.log(response.data)
+    return response;
+}
 
 export const getFeePeriods = async () => {
     const response = await axios.get("http://localhost:3000/fees/periods");
@@ -91,7 +96,7 @@ export const payFee = async (feeRecord) => {
     console.log("Fee record to be marked as paid:", feeRecord);
     // Mark a specific fee as paid using fee ID
     console.log("Member id for fee is: ", feeRecord.member_id);
-    const response = await axios.patch(`http://localhost:3000/fee/${feeRecord.member_id}`);
+    const response = await axios.patch(`http://localhost:3000/fee/${feeRecord.member_id}`, feeRecord);
     return response.data;
 };
 
@@ -134,10 +139,32 @@ export const setAuthUser = (user) => {
     }
 };
 
-export const getChallans = () => {
-    return JSON.parse(localStorage.getItem(CHALLAN_KEY) || '[]');
+export const getChallans = async () => {
+    try {
+        const response = await axios.get("http://localhost:3000/challans");
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching challans", error);
+        return [];
+    }
 };
 
-export const saveChallans = (challans) => {
-    localStorage.setItem(CHALLAN_KEY, JSON.stringify(challans));
+export const saveChallan = async (challan) => {
+    try {
+        const response = await axios.post("http://localhost:3000/challan", challan);
+        return response.data;
+    } catch (error) {
+        console.error("Error saving challan", error);
+        throw error;
+    }
+};
+
+export const getMembershipPlans = async () => {
+    const response = await axios.get("http://localhost:3000/membership-plans");
+    return response.data;
+};
+
+export const updateMembershipPlan = async (planName, data) => {
+    const response = await axios.put(`http://localhost:3000/membership-plans/${planName}`, data);
+    return response.data;
 };

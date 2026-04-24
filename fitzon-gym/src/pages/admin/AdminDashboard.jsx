@@ -82,8 +82,8 @@ const AdminDashboard = () => {
                         <StatCard icon={BadgeDollarSign} label="Monthly Revenue" value={monthlyRevenue} color="text-green-500" />
                     </div>
 
-                    {/* CHARTS */}
-                    {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    CHARTS
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                         <div className="fitzon-card">
                             <h3 className="text-xl font-bold mb-6">Revenue Overview</h3>
                             <div className="h-72">
@@ -98,9 +98,9 @@ const AdminDashboard = () => {
                                 </ResponsiveContainer>
                             </div>
                         </div>
-                    </div> */}
+                    </div>
 
-                    {/* RECENT ENROLLMENTS */}
+                    RECENT ENROLLMENTS
                     <div className="fitzon-card overflow-hidden p-0">
                         <div className="p-6 border-b border-[#1f1f1f] flex justify-between items-center">
                             <h3 className="text-xl font-bold">Recent Enrollments</h3>

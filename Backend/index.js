@@ -2,7 +2,7 @@ import express from "express";
 import db from "./db.js";
 import cors from "cors";
 import bodyParser from "body-parser";
-import sendTextMessage from "./message code.js";
+import { sendTextMessage, sendBirthDayMessage } from "./message code.js";
 import axios from "axios";
 import env from "dotenv";
 import fs from "fs";
@@ -59,7 +59,7 @@ async function sendWhatsApp(mediaId, phone) {
     `https://graph.facebook.com/v22.0/1040915695774969/messages`,
     {
       messaging_product: "whatsapp",
-      to: '923165491386',
+      to: phone,
       type: "document",
       document: {
         id: mediaId,
@@ -105,17 +105,22 @@ const syncFees = async () => {
     // And insert an 'unpaid' entry with the correct amount from membership_plan
     const query = `
       INSERT INTO fees (member_id, amount, month, year, status)
-      SELECT m.id, mp.amount, $1, $2, 'unpaid'
+      SELECT m.id, 
+             CASE WHEN m.admission_paid = FALSE THEN (mp.amount + m.admission_fee) ELSE mp.amount END,
+             $1, $2, 'pending'
       FROM members m
       JOIN membership_plan mp ON m.plan = mp.plan_name
       LEFT JOIN fees f ON m.id = f.member_id AND f.month = $1 AND f.year = $2
       WHERE f.id IS NULL
     `;
-    await db.query(query, [currentMonth, currentYear]);
+    const result = await db.query(query, [currentMonth, currentYear]);
+    console.log("Fees inserted:", result.rowCount);
   } catch (err) {
     console.error("Error syncing fees:", err);
   }
 };
+
+
 
 // Helper function to sync daily attendance
 const syncDailyAttendance = async () => {
@@ -134,20 +139,62 @@ const syncDailyAttendance = async () => {
   }
 };
 
+// Helper function to initialize database tables
+const initDb = async () => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS challans (
+        id VARCHAR(50) PRIMARY KEY,
+        member_id INT REFERENCES members(id) ON DELETE CASCADE,
+        amount NUMERIC NOT NULL,
+        due_date DATE,
+        paid_date DATE,
+        payment_method VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("Database initialized: ensured challans table exists.");
+    await db.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS admission_fee NUMERIC DEFAULT 0;`);
+    await db.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS admission_paid BOOLEAN DEFAULT FALSE;`);
+    console.log("Database initialized: ensured admission columns exist in members table.");
+  } catch (err) {
+    console.error("Error initializing database tables:", err);
+  }
+};
+
 // Run immediately on server start to ensure today's attendance is initialized
+initDb();
 syncDailyAttendance();
 
 // Schedule to run every day at midnight (00:01)
 cron.schedule("1 0 * * *", () => {
   console.log("Running daily attendance sync cron job...");
   syncDailyAttendance();
+  checkingBirthDay()
 });
+
+async function checkingBirthDay() {
+  const data = new Date();
+  const month = data.getMonth() + 1;
+  const day = data.getDate();
+  const result = await db.query('SELECT * FROM members WHERE extract(month from dob)=$1  AND extract(day from dob)=$2', [month, day])
+  if (result.rows.length > 0) {
+    console.log("Birthday wishes to ", result.rows)
+    result.rows.forEach(async member => {
+      await sendBirthDayMessage(member.phone, member.name)
+    })
+  }
+  else {
+    console.log("No Birthday Today")
+  }
+}
+
 
 // ==================== MEMBERS ENDPOINTS ====================
 
 // Get all members with detailed information
 app.get("/members", async (req, res) => {
-  console.log('members....')
+  // console.log('members....')
   try {
     const result = await db.query(`
       SELECT 
@@ -228,7 +275,9 @@ SELECT
   m.id,
   m.name,
   m.phone,
-  a.status
+  a.status,
+  a.check_in,
+  a.check_out
 FROM members m
 INNER JOIN attendance a 
   ON m.id = a.member_id
@@ -275,10 +324,10 @@ app.post("/attendance/:id", async (req, res) => {
 // Add a new member
 app.post("/member", async (req, res) => {
   try {
-    const { name, email, phone, address, gender, joinDate, plan } = req.body;
+    const { name, email, phone, address, dob, gender, joinDate, plan, admissionFee } = req.body;
     const result = await db.query(
-      "INSERT INTO members (name, email, phone, address, gender, join_date, plan, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active') RETURNING *",
-      [name, email, phone, address, gender, joinDate, plan]
+      "INSERT INTO members (name, email, phone, address, gender, join_date, plan, status, dob, admission_fee) VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active', $8, $9) RETURNING *",
+      [name, email, phone, address, gender, joinDate, plan, dob, admissionFee || 0]
     );
 
     // Immediately sync fees for this new member
@@ -294,12 +343,12 @@ app.post("/member", async (req, res) => {
 // Update member
 app.put("/members/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, address, gender, plan, status } = req.body;
-  console.log(id, name, email, phone, address, gender, plan, status);
+  const { name, email, phone, address, gender, plan, status, dob } = req.body;
+  console.log(id, name, email, phone, address, gender, plan, status, dob);
   try {
     const result = await db.query(
-      "UPDATE members SET name=$1, email=$2, phone=$3, address=$4, gender=$5, plan=$6 WHERE id=$7 RETURNING *",
-      [name, email, phone, address, gender, plan, id]
+      "UPDATE members SET name=$1, email=$2, phone=$3, address=$4, gender=$5, plan=$6, dob=$7 WHERE id=$8 RETURNING *",
+      [name, email, phone, address, gender, plan, dob, id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "member not found" });
@@ -334,6 +383,65 @@ app.delete("/member/:id", async (req, res) => {
 
 // ==================== FEES ENDPOINTS ====================
 
+//===================== fingerprint machine data handler=====
+app.all("/iclock/cdata", async (req, res) => {
+  const body = req.body;
+  console.log("req received for attendance");
+
+  if (body && body.includes("\t")) {
+    const fields = body.trim().split("\t");
+    const record = {
+      userId: fields[0],
+      timestamp: fields[1],
+      verifyType: fields[2],
+      status: fields[3],
+    };
+    // result 
+    // ✅ Attendance Record: {
+    // userId: '2',
+    // timestamp: '2026-04-19 16:57:56',
+    // verifyType: '0',
+    // status: '4'
+    // }
+    console.log("✅ Attendance Record:", record);
+    let type = "unknown";
+    const nameObj = await db.query('SELECT name,phone FROM members WHERE id=$1', [record.userId])
+    console.log(nameObj.rows[0].name)
+    //sendTextMessage(nameObj.rows[0].name);
+    if (record.status === "0") type = "check_in";
+    else if (record.status === "1") type = "check_out";
+    else type = "unknown";
+    if (type === "check_in") {
+      await db.query(
+        `UPDATE attendance_sessions SET status='present', check_in=$1 WHERE user_id=$2`,
+        [record.timestamp, record.userId]
+
+      );
+      sendTextMessage(nameObj.rows[0].name, type, record.timestamp, nameObj.rows[0].phone);
+    }
+
+    if (type === "check_out") {
+      await db.query(
+        `UPDATE attendance_sessions
+     SET  check_out = $1 , status='present'
+     WHERE user_id = $2 AND check_out IS NULL`,
+        [record.timestamp, record.userId]
+      );
+      sendTextMessage(nameObj.rows[0].name, type, record.timestamp, nameObj.rows[0].phone);
+    }
+  }
+  else {
+    await db.query(
+      `UPDATE attendance_sessions
+     SET status='present',check_in=$1
+     WHERE user_id = $2 AND check_out IS NULL`,
+      [record.timestamp, record.userId]
+    );
+    sendTextMessage(nameObj.rows[0].name, "", record.timestamp, nameObj.rows[0].phone);
+  }
+
+  res.send("OK");
+});
 // Get all available month/year combinations that have fee records
 app.get("/fees/periods", async (req, res) => {
   try {
@@ -373,8 +481,6 @@ app.get("/fees", async (req, res) => {
     const currentMonth = month || new Date().getMonth() + 1;
     const currentYear = year || new Date().getFullYear();
 
-    console.log(`Fetching fees for month: ${currentMonth}, year: ${currentYear}`);
-
     const result = await db.query(`
       SELECT 
         f.id,
@@ -384,6 +490,8 @@ app.get("/fees", async (req, res) => {
         f.year,
         f.status,
         f.paid_date as "paidDate",
+        f.refund,
+        f.paymentmethod,
         m.name,
         m.email,
         m.phone
@@ -392,8 +500,6 @@ app.get("/fees", async (req, res) => {
       WHERE f.month = $1 AND f.year = $2
       ORDER BY f.id DESC
     `, [currentMonth, currentYear]);
-
-    // console.log(`Found ${result.rows.length} fees:`, result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching fees:", err);
@@ -423,11 +529,18 @@ app.patch("/fee/:id", async (req, res) => {
   try {
     const { id } = req.params;
     console.log("Updating fee with ID:", id);
+    const { member_id, month, year, method, status, paid_date } = req.body;
+    console.log("feeRecord: ", member_id, month, year, method, status, paid_date)
 
     const result = await db.query(
-      "UPDATE fees SET status='paid', paid_date=CURRENT_DATE WHERE member_id=$1 RETURNING *",
-      [id]
+      "UPDATE fees SET status='paid', paid_date=CURRENT_DATE, paymentmethod=$1 WHERE member_id=$2 AND month=$3 AND year=$4 RETURNING *",
+      [method, member_id, month, year]
     );
+
+    if (result.rows.length > 0) {
+      // If payment is successful, mark admission fee as paid for this member
+      await db.query("UPDATE members SET admission_paid = TRUE WHERE id = $1", [member_id]);
+    }
     console.log(result.rows[0]);
     // console.log("Query result:", result.rows);
 
@@ -495,6 +608,58 @@ app.post("/fee", async (req, res) => {
     res.status(500).json({ error: "server error" });
   }
 })
+app.post("/fee/refund", async (req, res) => {
+  try {
+    const { id, month, year } = req.query
+    console.log("refund ", id, month, year)
+    const result = await db.query(`UPDATE fees SET refund='refunded' WHERE member_id=$1 AND month=$2 AND year=$3 RETURNING *`, [id, month, year])
+    res.json(result.rows[0])
+  } catch (err) {
+    console.error(err)
+  }
+})
+
+// ==================== CHALLAN ENDPOINTS ====================
+
+app.get("/challans", async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT 
+        c.id, 
+        c.member_id as "memberId", 
+        m.name as "memberName", 
+        m.phone, 
+        m.address, 
+        c.amount, 
+        TO_CHAR(c.due_date, 'YYYY-MM-DD') as "dueDate", 
+        TO_CHAR(c.paid_date, 'YYYY-MM-DD') as "paidDate", 
+        c.payment_method as "paymentmethod", 
+        c.created_at as "createdAt"
+      FROM challans c
+      JOIN members m ON c.member_id = m.id
+      ORDER BY c.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching challans:", err);
+    res.status(500).json({ error: "server error" });
+  }
+});
+
+app.post("/challan", async (req, res) => {
+  try {
+    const { id, memberId, amount, dueDate, paidDate, paymentmethod } = req.body;
+    const result = await db.query(`
+      INSERT INTO challans (id, member_id, amount, due_date, paid_date, payment_method)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [id, memberId, amount, dueDate || null, paidDate || null, paymentmethod || '']);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error saving challan:", err);
+    res.status(500).json({ error: "server error" });
+  }
+});
 
 // ==================== MEMBERSHIP PLANS ENDPOINTS ====================
 
@@ -516,68 +681,30 @@ app.get("/membership-plans", async (req, res) => {
   }
 })
 
-// ==================== CLASS ENDPOINTS ====================
+// Update membership plan
+app.put("/membership-plans/:planName", async (req, res) => {
+  try {
+    const { planName } = req.params;
+    const { amount, description } = req.body;
 
-// Get all classes
-// app.get("/classes", async (req, res) => {
-//   try {
-//     const result = await db.query(`
-//       SELECT 
-//         id,
-//         name,
-//         trainer,
-//         time,
-//         days,
-//         capacity,
-//         enrolled,
-//         description
-//       FROM classes
-//       ORDER BY id ASC
-//     `);
-//     res.json(result.rows);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ error: "server error" });
-//   }
-// })
+    const result = await db.query(
+      `UPDATE membership_plan 
+       SET amount = $1, description = $2 
+       WHERE plan_name = $3 
+       RETURNING plan_name as "planName", amount, description`,
+      [amount, description, planName]
+    );
 
-// Get a single class
-// app.get("/class/:id", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const result = await db.query(`
-//       SELECT *
-//       FROM classes
-//       WHERE id = $1
-//     `, [id]);
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({ error: "class not found" });
-//     }
-//     res.json(result.rows[0]);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ error: "server error" });
-//   }
-// })
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Plan not found" });
+    }
 
-// Update class
-// app.put("/class/:id", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { name, trainer, time, days, capacity, description } = req.body;
-//     const result = await db.query(
-//       "UPDATE classes SET name=$1, trainer=$2, time=$3, days=$4, capacity=$5, description=$6 WHERE id=$7 RETURNING *",
-//       [name, trainer, time, days, capacity, description, id]
-//     );
-//     if (result.rows.length === 0) {
-//       return res.status(404).json({ error: "class not found" });
-//     }
-//     res.json(result.rows[0]);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ error: "server error" });
-//   }
-// })
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error updating membership plan:", err);
+    res.status(500).json({ error: "server error" });
+  }
+});
 
 // ==================== AUTHENTICATION ENDPOINTS ====================
 

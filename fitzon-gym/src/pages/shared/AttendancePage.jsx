@@ -629,13 +629,13 @@ const AttendancePage = () => {
                             <tr>
                                 <th className="p-4 font-medium">Member</th>
                                 <th className="p-4 font-medium text-center">Status</th>
-                                <th className="p-4 font-medium text-right">Action</th>
+                                <th className="p-4 font-medium text-center">Check In</th>
+                                <th className="p-4 font-medium text-center">Check Out</th>
+                                <th className="p-4 font-medium text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#1f1f1f]">
-                            {ShowData ? (<h1>No record found</h1>
-
-                            ) : (members.map(member => (
+                            {members.map(member => (
                                 <tr key={member.id} className="hover:bg-[#111111] transition-colors">
                                     <td className="p-4">
                                         <div className="font-bold">{member.name}</div>
@@ -644,7 +644,13 @@ const AttendancePage = () => {
                                     <td className="p-4 text-center font-bold text-white">
                                         {member.status}
                                     </td>
-                                    <td className="p-4 text-right">
+                                    <td className="p-4 text-center">
+                                        {member.check_in || "--:--"}
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        {member.check_out || "--:--"}
+                                    </td>
+                                    <td className="p-4 text-center">
                                         {member.status === 'present' ? (
                                             // Already marked present — show badge regardless of date
                                             <span className="inline-flex items-center gap-2 text-green-500 text-sm font-bold">
@@ -666,7 +672,7 @@ const AttendancePage = () => {
                                         )}
                                     </td>
                                 </tr>
-                            )))}
+                            ))}
                         </tbody>
                     </table>
                     {members.length === 0 && (

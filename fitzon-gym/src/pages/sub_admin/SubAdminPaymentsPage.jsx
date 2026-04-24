@@ -3,14 +3,15 @@ import { AlertCircle, CheckCircle2, CreditCard, FileText, Calendar } from 'lucid
 import toast from 'react-hot-toast';
 import SubAdminSidebar from '../../components/sub_admin/SubAdminSidebar';
 import Modal from '../../components/shared/Modal';
-import { getChallans, getMembers, saveChallans, getFees, payFee, getFeePeriods } from '../../utils/localStorage';
-
+import { getMembers, saveChallan, getFees, payFee, getFeePeriods, refund } from '../../utils/localStorage';
+import html2pdf from "html2pdf.js";
 const SubAdminPaymentsPage = () => {
     const [members, setMembers] = useState([]);
     const [fees, setFees] = useState([]);
     const [tab, setTab] = useState('pending'); // 'pending' | 'paid'
     const [selectedChallan, setSelectedChallan] = useState(null);
     const [isChallanOpen, setIsChallanOpen] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState("cash");
 
     // Month/Year filter states
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -51,32 +52,37 @@ const SubAdminPaymentsPage = () => {
         const fetchF = async () => {
             const data = await getFees(selectedMonth, selectedYear);
             setFees(data || []);
-            console.log("data for selected month:",data);
+            console.log("data for selected month:", data);
         };
         fetchF();
     }, [selectedMonth, selectedYear]);
 
-    const formattedMembers = members.map(m => {
-        const matchingFee = fees.find(f => Number(f.member_id) === Number(m.id) && Number(f.month) === selectedMonth && Number(f.year) === selectedYear);
-        return {
-            ...m,
-            fee_status: (matchingFee && matchingFee.status && matchingFee.status.toLowerCase() === 'paid') ? 'Paid' : 'Pending',
-            feeAmount: matchingFee ? matchingFee.amount : (m.fee || 5000),
-            paidDate: matchingFee ? matchingFee.paid_date : null
-        };
-    });
+    // const formattedMembers = members.map(m => {
+    //     const matchingFee = fees.find(f => Number(f.member_id) === Number(m.id) && Number(f.month) === selectedMonth && Number(f.year) === selectedYear);
+    //     console.log("matchingFee",matchingFee)
+    //     return {
+    //         ...m,
+    //         fee_status: matchingFee ? matchingFee.status: "no record found",
+    //         feeAmount: matchingFee ? matchingFee.amount : "null",
+    //         // (m.fee || 5000),
+    //         paidDate: matchingFee ? matchingFee.paidDate : null,
+    //         refund: matchingFee ? matchingFee.refund : null,
+    //         paymentmethod: matchingFee ? matchingFee.paymentmethod : null,
+    //     };
+    // });
+    const formattedMembers = fees;
     console.log("format: ", formattedMembers);
     const pendingMembers = useMemo(
-        () => formattedMembers.filter((m) => m.fee_status === 'Pending'),
+        () => formattedMembers.filter((m) => m.status === 'Pending' || m.status === 'pending'),
         // () => formattedMembers.filter((m) => m.status === 'Active' && m.fee_status === 'Pending'),
         [formattedMembers]
     );
     console.log("pending: ", pendingMembers);
     const paidMembers = useMemo(
-        () => formattedMembers.filter((m) => m.status === 'Active' && m.fee_status === 'Paid'),
+        () => formattedMembers.filter((m) => m.status === 'paid' || m.status === 'Paid'),
         [formattedMembers]
     );
-
+    console.log("paidmembers: ", paidMembers)
     const filteredMembers = tab === 'pending' ? pendingMembers : paidMembers;
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -87,87 +93,121 @@ const SubAdminPaymentsPage = () => {
 
     const formatRs = (n) => `Rs ${Number(n || 0).toLocaleString()}`;
 
-    const nextMonthDate = () => {
-        const d = new Date();
-        d.setMonth(d.getMonth() + 1);
-        return d.toISOString().split('T')[0];
-    };
+    // const nextMonthDate = () => {
+    //     const d = new Date();
+    //     d.setMonth(d.getMonth() + 1);
+    //     return d.toISOString().split('T')[0];
+    // };
 
     const generateChallanNo = () => {
         return `CHL-${Date.now().toString(36).toUpperCase()}`;
     };
 
-    const printChallan = (challan) => {
-        const html = `
-        <html>
-          <head>
-            <title>${challan.id}</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
-              .box { border: 1px solid #ddd; border-radius: 10px; padding: 18px; max-width: 720px; margin: 0 auto; }
-              h1 { margin: 0 0 6px; font-size: 18px; }
-              .muted { color: #555; font-size: 12px; }
-              .row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
-              .k { font-size: 12px; color: #555; }
-              .v { font-size: 14px; font-weight: bold; }
-              hr { border: none; border-top: 1px solid #eee; margin: 14px 0; }
-              .footer { margin-top: 18px; font-size: 12px; color: #555; }
-            </style>
-          </head>
-          <body>
-            <div class="box">
-              <h1>FITZON Gym Challan</h1>
-              <div class="muted">Generated for fee payment</div>
-              <hr />
-              <div class="row">
-                <div><div class="k">Challan No</div><div class="v">${challan.id}</div></div>
-                <div><div class="k">Paid Date</div><div class="v">${challan.paidDate}</div></div>
-              </div>
-              <div class="row">
-                <div><div class="k">Member</div><div class="v">${challan.memberName}</div></div>
-                <div><div class="k">Phone</div><div class="v">${challan.phone || 'N/A'}</div></div>
-              </div>
-              <div style="margin-top: 10px;">
-                <div class="k">Address</div>
-                <div class="v" style="font-weight: normal;">${challan.address || 'N/A'}</div>
-              </div>
-              <hr />
-              <div class="row">
-                <div><div class="k">Amount</div><div class="v">${formatRs(challan.amount)}</div></div>
-                <div><div class="k">Due Date</div><div class="v">${challan.dueDate || 'N/A'}</div></div>
-              </div>
-              <div class="footer">
-                Status: <b>Paid</b>
-              </div>
+    const printChallan = async (challan) => {
+        const element = document.createElement("div");
+        element.innerHTML = `
+        <div style="font-family: Arial; padding: 24px; color: #111;">
+            <div style="border: 1px solid #ddd; border-radius: 10px; padding: 18px; max-width: 720px; margin: 0 auto;">
+                <h1 style="margin:0 0 6px; font-size:18px;">FITZON Gym Challan</h1>
+                <div style="color:#555; font-size:12px;">Generated for fee payment</div>
+                <hr/>
+
+                <div style="display:flex; justify-content:space-between;">
+                    <div><b>Challan No:</b> ${challan.id}</div>
+                    <div><b>Paid Date:</b> ${challan.paidDate}</div>
+                </div>
+
+                <div style="margin-top:10px;">
+                    <b>Member:</b> ${challan.memberName}<br/>
+                    <b>Phone:</b> ${challan.phone || "N/A"}
+                </div>
+
+                <div style="margin-top:10px;">
+                    <b>Address:</b> ${challan.address || "N/A"}
+                </div>
+
+                <hr/>
+
+                <div style="display:flex; justify-content:space-between;">
+                    <div><b>Amount:</b> ${formatRs(challan.amount)}</div>
+                    <div><b>Due Date:</b> ${challan.dueDate || "N/A"}</div>
+                </div>
+
+                <div style="margin-top:15px;">
+                    Status: <b>Paid</b>
+                </div>
+                <div style="display:flex; justify-content:center"><b>Payment Method:</b> ${challan.paymentmethod}</div>
             </div>
             <script>window.onload = function(){ window.print(); };</script>
-          </body>
-        </html>
-        `;
+        </div>
+    `;
 
-        const w = window.open('', '_blank');
-        if (!w) {
-            toast.error('Popup blocked. Please allow popups to print challan.');
-            return;
+        const opt = {
+            margin: 0.3,
+            filename: `challan-${challan.id}.pdf`,
+            image: {
+                type: "jpeg",
+                quality: 1 // 🔥 highest quality
+            },
+            html2canvas: {
+                scale: 3, // 🔥 important (default is ~1)
+                useCORS: true
+            },
+            jsPDF: {
+                unit: "in",
+                format: "a4",
+                orientation: "portrait"
+            }
+        };
+
+        try {
+            // 🔥 Generate PDF as Blob
+            const pdfBlob = await html2pdf().from(element).set(opt).outputPdf("blob");
+
+            // 🔥 Send to backend
+            const formData = new FormData();
+            formData.append("file", pdfBlob, `challan-${challan.id}.pdf`);
+            formData.append("phone", challan.phone);
+
+            await fetch("http://localhost:3000/send-whatsapp", {
+                method: "POST",
+                body: formData
+            });
+
+            alert("Challan sent to WhatsApp successfully!");
+            const w = window.open('', '_blank');
+            if (!w) {
+                toast.error('Popup blocked. Please allow popups to print challan.');
+                return;
+            }
+            w.document.write(element.innerHTML);
+            w.document.close();
+
+
+        } catch (err) {
+            console.error(err);
+            alert("Error generating/sending PDF");
         }
-        w.document.write(html);
-        w.document.close();
     };
 
     const markAsPaidAndGenerateChallan = async (memberId) => {
-        const member = formattedMembers.find(m => m.id === memberId);
+        console.log("member id: ", memberId)
+        const member = formattedMembers.find(m => m.member_id === memberId);
         if (!member) return;
-        if (member.status !== 'Active') return;
-        if (member.fee_status !== 'Pending') return;
+        console.log("member; ", member)
+        if (member.status === 'Paid' || member.status === 'paid') return;
+        const method = prompt("enter payment method");
+        setPaymentMethod(method);
 
         try {
             await payFee({
-                member_id: member.id,
+                member_id: member.member_id,
                 amount: Number(member.feeAmount || 0),
                 month: selectedMonth,
                 year: selectedYear,
                 status: 'Paid',
-                paid_date: new Date().toISOString().split('T')[0]
+                paid_date: new Date().toISOString().split('T')[0],
+                method: method
             });
 
             // Refresh fees
@@ -179,25 +219,25 @@ const SubAdminPaymentsPage = () => {
 
             const challan = {
                 id: challanId,
-                memberId: member.id,
+                memberId: member.member_id,
                 memberName: member.name,
                 phone: member.phone,
                 address: member.address || '',
-                amount: Number(member.feeAmount || 0),
+                amount: Number(member.amount || 0),
                 dueDate: member.nextPaymentDate || '',
                 paidDate,
+                paymentmethod: method,
                 createdAt: new Date().toISOString(),
             };
 
-            const challans = getChallans();
-            challans.unshift(challan);
-            saveChallans(challans);
+            await saveChallan(challan);
 
             toast.success('Payment marked as paid. Challan generated!');
             setSelectedChallan(challan);
             setIsChallanOpen(true);
         } catch (error) {
-            toast.error('Failed to update member status.');
+            toast.error('Failed to update member status.', error);
+            console.log(error)
         }
     };
 
@@ -286,6 +326,7 @@ const SubAdminPaymentsPage = () => {
                                 <th className="p-4 font-medium">Fee</th>
                                 <th className="p-4 font-medium">Due Date</th>
                                 <th className="p-4 font-medium">Address</th>
+                                <th className="p-4 font-medium">Pament Method</th>
                                 <th className="p-4 font-medium text-right">Action</th>
                             </tr>
                         </thead>
@@ -300,14 +341,14 @@ const SubAdminPaymentsPage = () => {
 
                                     <td className="p-4 text-gray-400">
                                         <span className="font-bebas text-lg tracking-wide">
-                                            {formatRs(member.fee)}
+                                            {formatRs(member.amount)}
                                         </span>
                                     </td>
 
                                     <td className="p-4 text-gray-400 text-sm">
                                         <span className="inline-flex items-center gap-2">
                                             <Calendar className="w-4 h-4 text-gray-500" />
-                                            {member.fee_status === 'Paid' ? member.paidDate : 'Overdue'}
+                                            {member.status === 'Paid' || member.status == 'paid' ? member.paidDate : 'pending'}
                                         </span>
                                     </td>
 
@@ -316,11 +357,11 @@ const SubAdminPaymentsPage = () => {
                                             {member.address || 'N/A'}
                                         </div>
                                     </td>
-
+                                    <td className='text-[12px] text-gray-400'>{member.paymentmethod}</td>
                                     <td className="p-4 text-right">
-                                        {member.fee_status === 'Pending' ? (
+                                        {member.status === 'Pending' || member.status === 'pending' ? (
                                             <button
-                                                onClick={() => markAsPaidAndGenerateChallan(member.id)}
+                                                onClick={() => markAsPaidAndGenerateChallan(member.member_id)}
 
                                                 className="btn-neon py-1.5 px-3 text-xs w-full sm:w-auto"
                                             >
@@ -330,7 +371,29 @@ const SubAdminPaymentsPage = () => {
                                         ) : (
                                             <span className="inline-flex items-center gap-2 text-gray-500 text-sm italic">
                                                 <FileText className="w-4 h-4" />
-                                                Settled
+                                                Paid
+                                                {
+                                                    member.refund == "refunded" ? (
+                                                        <>
+                                                            <FileText className="w-4 h-4"></FileText>
+                                                            refunded
+                                                        </>
+
+
+                                                    ) : (
+
+                                                        <button onClick={async () => {
+                                                            await refund(member.member_id, selectedMonth, selectedYear);
+
+                                                            const updatedFees = await getFees(selectedMonth, selectedYear);
+                                                            setFees(updatedFees || []);
+
+                                                            toast.success("Refund successful");
+                                                        }} className="btn-neon py-1.5 px-3 text-xs w-full sm:w-auto">
+                                                            Refund
+                                                        </button>
+                                                    )
+                                                }
                                             </span>
                                         )}
                                     </td>
@@ -409,6 +472,13 @@ const SubAdminPaymentsPage = () => {
                                         {formatRs(selectedChallan.amount)}
                                     </div>
                                 </div>
+                                <div>
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider">Payment Method</div>
+                                    <div className="text-neon font-bebas text-3xl mt-1">
+                                        {selectedChallan.paymentmethod}
+                                    </div>
+                                </div>
+
                                 <div className="text-right">
                                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-green-500/20 bg-green-500/10 text-green-500 font-bold text-xs">
                                         <CheckCircle2 className="w-4 h-4" />

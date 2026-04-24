@@ -1,9 +1,22 @@
 import Navbar from '../../components/shared/Navbar';
-import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, MapPin, Mail, Phone, Users as UsersIcon, Clock, Star } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowRight, CheckCircle2, ChevronDown, Dumbbell, MapPin, Mail, Phone, Users as UsersIcon, Clock, Star, Tag } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { getMembershipPlans } from '../../utils/localStorage';
 
 const LandingPage = () => {
-    // Pricing/Classes sections removed; keeping landing page lightweight.
+    const [plans, setPlans] = useState([]);
+
+    useEffect(() => {
+        const fetchPlans = async () => {
+            try {
+                const data = await getMembershipPlans();
+                setPlans(data || []);
+            } catch (error) {
+                console.error("Failed to fetch plans", error);
+            }
+        };
+        fetchPlans();
+    }, []);
 
     return (
         <div className="bg-dark text-white min-h-screen">
@@ -38,6 +51,42 @@ const LandingPage = () => {
                             <p className="text-gray-400 uppercase tracking-widest text-sm mt-1">Trainers</p>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            {/* PLANS SECTION */}
+            <section id="plans" className="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-border">
+                <div className="text-center mb-16">
+                    <h2 className="heading-primary mb-4 text-neon">Membership Plans</h2>
+                    <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+                        Choose the perfect plan to reach your fitness goals. Transparent pricing, no hidden fees.
+                    </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {plans.map((plan) => (
+                        <div key={plan.planName} className="fitzon-card flex flex-col hover:border-neon transition-colors duration-300">
+                            <div className="mb-6">
+                                <h3 className="text-2xl font-bold text-white mb-2">{plan.planName}</h3>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-bebas text-neon">Rs {plan.amount}</span>
+                                    <span className="text-gray-500">/month</span>
+                                </div>
+                            </div>
+                            <p className="text-gray-400 mb-8 flex-1">
+                                {plan.description || 'Premium fitness access and amenities.'}
+                            </p>
+                            <a href="/login" className="btn-outline w-full text-center py-3">
+                                Join Now
+                            </a>
+                        </div>
+                    ))}
+                    {plans.length === 0 && (
+                        <div className="col-span-full text-center py-12 text-gray-500">
+                            <Tag className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <p>Loading plans or no plans available at the moment.</p>
+                        </div>
+                    )}
                 </div>
             </section>
 

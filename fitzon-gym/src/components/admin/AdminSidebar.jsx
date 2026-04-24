@@ -8,7 +8,9 @@ import {
     ClipboardList,
     LogOut,
     Menu,
-    X
+    X,
+    Tag,
+    Receipt
 } from 'lucide-react';
 import { useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
@@ -29,6 +31,8 @@ const AdminSidebar = ({ children }) => {
         { icon: UserPlus, label: 'Add Member', path: '/admin/members/add' },
         { icon: CreditCard, label: 'Payments', path: '/admin/payments' },
         { icon: ClipboardList, label: 'Attendance', path: '/admin/attendance' },
+        { icon: Tag, label: 'Plans', path: '/admin/plans' },
+        { icon: Receipt, label: 'Challans', path: '/admin/challans' },
     ];
 
     const SidebarContent = () => (

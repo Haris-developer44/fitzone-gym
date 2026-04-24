@@ -1,22 +1,33 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminSidebar from '../../components/admin/AdminSidebar';
-import { getMembers, saveMember } from '../../utils/localStorage';
+import { getMembers, saveMember, getMembershipPlans } from '../../utils/localStorage';
 import { ChevronLeft } from 'lucide-react';
+import { useEffect } from 'react';
 import toast from 'react-hot-toast';
 
 const AddMemberPage = () => {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
-        name: '', email: '', phone: '', address: '', plan: 'Basic', gender: 'Male'
+        name: '', email: '', phone: '', address: '', plan: 'Basic', gender: 'Male', dob: '', admissionFee: 0
     });
 
-    const feeFromPlan = (plan) => {
-        if (plan === 'Basic') return 3000;
-        if (plan === 'Pro') return 5500;
-        if (plan === 'Elite') return 9000;
-        return 3000;
-    };
+    const [plans, setPlans] = useState([]);
+
+    useEffect(() => {
+        const fetchPlans = async () => {
+            try {
+                const data = await getMembershipPlans();
+                setPlans(data || []);
+                if (data && data.length > 0) {
+                    setFormData(prev => ({ ...prev, plan: data[0].planName }));
+                }
+            } catch (error) {
+                console.error("Failed to fetch plans", error);
+            }
+        };
+        fetchPlans();
+    }, []);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -34,7 +45,6 @@ const AddMemberPage = () => {
             }
 
             const joinDate = new Date();
-            const fee = feeFromPlan(formData.plan);
 
             const newMember = {
                 name: formData.name,
@@ -43,6 +53,8 @@ const AddMemberPage = () => {
                 address: formData.address,
                 gender: formData.gender,
                 plan: formData.plan,
+                dob: formData.dob,
+                admissionFee: formData.admissionFee,
                 joinDate: joinDate.toISOString().split('T')[0]
             };
 
@@ -84,13 +96,15 @@ const AddMemberPage = () => {
                         <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="input-field" required />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                             <label className="block text-sm text-gray-400 mb-2">Membership Plan *</label>
                             <select name="plan" value={formData.plan} onChange={handleChange} className="input-field">
-                                <option value="Basic">Basic (Rs 3,000)</option>
-                                <option value="Pro">Pro (Rs 5,500)</option>
-                                <option value="Elite">Elite (Rs 9,000)</option>
+                                {plans.map((p) => (
+                                    <option key={p.planName} value={p.planName}>
+                                        {p.planName} (Rs {p.amount})
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <div>
@@ -100,21 +114,31 @@ const AddMemberPage = () => {
                                 <option value="Female">Female</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-2">Date of Birth *</label>
+                            <input type="date" name="dob" value={formData.dob} onChange={handleChange} className="input-field" required />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-2">Admission Fee (Paid Once)</label>
+                                <input type="number" name="admissionFee" value={formData.admissionFee} onChange={handleChange} className="input-field" placeholder="0" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-2">Address</label>
+                            <textarea name="address" value={formData.address} onChange={handleChange} className="input-field h-24 resize-none" />
+                        </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-2">Address</label>
-                        <textarea name="address" value={formData.address} onChange={handleChange} className="input-field h-24 resize-none" />
+                    <div className="mt-10 pt-6 border-t border-[#2f2f2f] flex justify-end gap-4">
+                        <button type="button" onClick={() => navigate('/admin/members')} className="px-6 py-3 border border-border rounded-lg text-gray-400 hover:text-white hover:bg-[#1a1a1a]">
+                            Cancel
+                        </button>
+                        <button type="submit" className="btn-neon">
+                            Add Member
+                        </button>
                     </div>
-                </div>
-
-                <div className="mt-10 pt-6 border-t border-[#2f2f2f] flex justify-end gap-4">
-                    <button type="button" onClick={() => navigate('/admin/members')} className="px-6 py-3 border border-border rounded-lg text-gray-400 hover:text-white hover:bg-[#1a1a1a]">
-                        Cancel
-                    </button>
-                    <button type="submit" className="btn-neon">
-                        Add Member
-                    </button>
                 </div>
             </form>
         </AdminSidebar>

@@ -14,6 +14,8 @@ import MembersPage from './pages/admin/MembersPage';
 import AddMemberPage from './pages/admin/AddMemberPage';
 import EditMemberPage from './pages/admin/EditMemberPage';
 import PaymentsPage from './pages/admin/PaymentsPage';
+import PlansPage from './pages/admin/PlansPage';
+import ChallansPage from './pages/admin/ChallansPage';
 
 // Sub Admin Pages
 import SubAdminMembersPage from './pages/sub_admin/SubAdminMembersPage';
@@ -38,6 +40,8 @@ function App() {
           <Route path="/admin/members/add" element={<AddMemberPage />} />
           <Route path="/admin/members/edit/:id" element={<EditMemberPage />} />
           <Route path="/admin/payments" element={<PaymentsPage />} />
+          <Route path="/admin/plans" element={<PlansPage />} />
+          <Route path="/admin/challans" element={<ChallansPage />} />
         </Route>
 
         {/* Sub Admin Protected Routes */}

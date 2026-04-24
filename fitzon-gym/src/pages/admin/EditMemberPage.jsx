@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AdminSidebar from '../../components/admin/AdminSidebar';
-import { getMemberById, saveMembers, getMembers, updateMember } from '../../utils/localStorage';
+import { getMemberById, saveMembers, getMembers, updateMember, getMembershipPlans } from '../../utils/localStorage';
 import { ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -12,15 +12,22 @@ const EditMemberPage = () => {
     const [loading, setLoading] = useState(true);
 
     const [formData, setFormData] = useState({
-        name: '', email: '', phone: '', address: '', plan: 'Basic', gender: 'Male'
+        name: '', email: '', phone: '', address: '', plan: 'Basic', gender: 'Male', dob: ''
     });
 
-    const feeFromPlan = (plan) => {
-        if (plan === 'Basic') return 3000;
-        if (plan === 'Pro') return 5500;
-        if (plan === 'Elite') return 9000;
-        return 3000;
-    };
+    const [plans, setPlans] = useState([]);
+
+    useEffect(() => {
+        const fetchPlans = async () => {
+            try {
+                const data = await getMembershipPlans();
+                setPlans(data || []);
+            } catch (error) {
+                console.error("Failed to fetch plans", error);
+            }
+        };
+        fetchPlans();
+    }, []);
 
     useEffect(() => {
         const loadData = async () => {
@@ -38,7 +45,8 @@ const EditMemberPage = () => {
                 phone: member.phone || '',
                 address: member.address || '',
                 plan: member.plan || 'Basic',
-                gender: member.gender || 'Male'
+                gender: member.gender || 'Male',
+                dob: member.dob ? new Date(member.dob).toISOString().split('T')[0] : ''
             });
             setLoading(false);
         };
@@ -70,8 +78,7 @@ const EditMemberPage = () => {
         // toast.success('Member details updated!');
         // navigate('/admin/members');
         const updatedMember = {
-            ...formData,
-            fee: feeFromPlan(formData.plan),
+            ...formData
         };
         console.log(updatedMember, id);
         updateMember(updatedMember, id);
@@ -110,13 +117,15 @@ const EditMemberPage = () => {
                         <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="input-field" required />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                             <label className="block text-sm text-gray-400 mb-2">Membership Plan *</label>
                             <select name="plan" value={formData.plan} onChange={handleChange} className="input-field">
-                                <option value="Basic">Basic (Rs 3,000)</option>
-                                <option value="Pro">Pro (Rs 5,500)</option>
-                                <option value="Elite">Elite (Rs 9,000)</option>
+                                {plans.map((p) => (
+                                    <option key={p.planName} value={p.planName}>
+                                        {p.planName} (Rs {p.amount})
+                                    </option>
+                                ))}
                             </select>
                         </div>
                         <div>
@@ -125,6 +134,10 @@ const EditMemberPage = () => {
                                 <option value="Male">Male</option>
                                 <option value="Female">Female</option>
                             </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-gray-400 mb-2">Date of Birth *</label>
+                            <input type="date" name="dob" value={formData.dob} onChange={handleChange} className="input-field" required />
                         </div>
                     </div>
 

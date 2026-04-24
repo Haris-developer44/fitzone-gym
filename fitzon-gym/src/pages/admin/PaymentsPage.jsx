@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import AdminSidebar from '../../components/admin/AdminSidebar';
-import { getMembers, saveMembers, getChallans, saveChallans, getFees, payFee, createFee, getFeePeriods } from '../../utils/localStorage';
+import { getMembers, saveMembers, saveChallan, getFees, payFee, createFee, getFeePeriods, refund } from '../../utils/localStorage';
 import { DollarSign, AlertCircle, Calendar, CheckCircle2, FileText, CreditCard, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from '../../components/shared/Modal';
@@ -10,7 +10,6 @@ const PaymentsPage = () => {
     const [members, setMembers] = useState([]);
     const [fees, setFees] = useState([]);
     const [filterStatus, setFilterStatus] = useState('All');
-
     // Month/Year filter states
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -52,27 +51,29 @@ const PaymentsPage = () => {
     useEffect(() => {
         const fetchF = async () => {
             const data = await getFees(selectedMonth, selectedYear);
+            console.log("fees", data);
             setFees(data || []);
         };
         fetchF();
     }, [selectedMonth, selectedYear]);
 
-    const formattedMembers = members.map(m => {
-        const matchingFee = fees.find(f => Number(f.member_id) === Number(m.id));
-        return {
-            ...m,
-            feeId: matchingFee ? matchingFee.id : null,
-            feeStatus: (matchingFee && matchingFee.status && matchingFee.status.toLowerCase() === 'paid') ? 'Paid' : 'Pending',
-            feeAmount: matchingFee ? matchingFee.amount : (m.fee || 0),
-            paidDate: matchingFee ? matchingFee.paidDate : null
-        };
-        console.log(matchingFee);
-    }).filter(m => m.feeId); // Only include members with fees for this month
-    console.log(formattedMembers);
-
-    const totalCollected = formattedMembers.filter(m => m.feeStatus === 'Paid').reduce((acc, curr) => acc + Number(curr.fee || 0), 0);
-    const pendingAmount = formattedMembers.filter(m => m.feeStatus === 'Pending').reduce((acc, curr) => acc + Number(curr.fee || 0), 0);
-
+    // const formattedMembers = members.map(m => {
+    //     const matchingFee = fees.find(f => Number(f.member_id) === Number(m.id));
+    //     return {
+    //         ...m,
+    //         feeId: matchingFee ? matchingFee.id : null,
+    //         feeStatus: matchingFee ? matchingFee.status : "no record found",
+    //         feeAmount: matchingFee ? matchingFee.amount : (m.fee || 0),
+    //         refund: matchingFee ? matchingFee.refund : 'null',
+    //         paidDate: matchingFee ? matchingFee.paidDate : null
+    //     };
+    // }).filter(m => m.feeId); // Only include members with fees for this month
+    const formattedMembers = fees
+    console.log("formattedMembers: ", formattedMembers);
+    const totalCollected = formattedMembers.filter(m => m.status === 'Paid' || m.status === 'paid').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const pendingAmount = formattedMembers.filter(m => m.status === 'Pending' || m.status === 'pending').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+    const refunded = formattedMembers.filter(m => m.refund === 'refunded').reduce((acc, curr) => acc + Number(curr.amount || 0), 0)
+    console.log("refunded: ", refunded);
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     // Get unique months and years from available periods
@@ -93,68 +94,8 @@ const PaymentsPage = () => {
         d.setMonth(d.getMonth() + 1);
         return d.toISOString().split('T')[0];
     };
-
-    // const printChallan = (challan) => {
-    //     const html = `
-    //     <html>
-    //       <head>
-    //         <title>${challan.id}</title>
-    //         <style>
-    //           body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
-    //           .box { border: 1px solid #ddd; border-radius: 10px; padding: 18px; max-width: 720px; margin: 0 auto; }
-    //           h1 { margin: 0 0 6px; font-size: 18px; }
-    //           .muted { color: #555; font-size: 12px; }
-    //           .row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
-    //           .k { font-size: 12px; color: #555; }
-    //           .v { font-size: 14px; font-weight: bold; }
-    //           hr { border: none; border-top: 1px solid #eee; margin: 14px 0; }
-    //           .footer { margin-top: 18px; font-size: 12px; color: #555; }
-    //         </style>
-    //       </head>
-    //       <body>
-    //         <div class="box">
-    //           <h1>FITZON Gym Challan</h1>
-    //           <div class="muted">Generated for fee payment</div>
-    //           <hr />
-    //           <div class="row">
-    //             <div><div class="k">Challan No</div><div class="v">${challan.id}</div></div>
-    //             <div><div class="k">Paid Date</div><div class="v">${challan.paidDate}</div></div>
-    //           </div>
-    //           <div class="row">
-    //             <div><div class="k">Member</div><div class="v">${challan.memberName}</div></div>
-    //             <div><div class="k">Phone</div><div class="v">${challan.phone || 'N/A'}</div></div>
-    //           </div>
-    //           <div style="margin-top: 10px;">
-    //             <div class="k">Address</div>
-    //             <div class="v" style="font-weight: normal;">${challan.address || 'N/A'}</div>
-    //           </div>
-    //           <hr />
-    //           <div class="row">
-    //             <div><div class="k">Amount</div><div class="v">${formatRs(challan.amount)}</div></div>
-    //             <div><div class="k">Due Date</div><div class="v">${challan.dueDate || 'N/A'}</div></div>
-    //           </div>
-    //           <div class="footer">
-    //             Status: <b>Paid</b>
-    //           </div>
-    //         </div>
-    //         <script>window.onload = function(){ window.print(); };</script>
-    //       </body>
-    //     </html>
-    //     `;
-
-    //     const w = window.open('', '_blank');
-    //     if (!w) {
-    //         toast.error('Popup blocked. Please allow popups to print challan.');
-    //         return;
-    //     }
-    //     w.document.write(html);
-    //     w.document.close();
-    // };
-
-
     const printChallan = async (challan) => {
         const element = document.createElement("div");
-
         element.innerHTML = `
         <div style="font-family: Arial; padding: 24px; color: #111;">
             <div style="border: 1px solid #ddd; border-radius: 10px; padding: 18px; max-width: 720px; margin: 0 auto;">
@@ -186,6 +127,7 @@ const PaymentsPage = () => {
                 <div style="margin-top:15px;">
                     Status: <b>Paid</b>
                 </div>
+                <div style="display:flex; justify-content:center"><b>Payment Method:</b> ${challan.paymentmethod}</div>
             </div>
             <script>window.onload = function(){ window.print(); };</script>
         </div>
@@ -240,7 +182,7 @@ const PaymentsPage = () => {
     };
 
     const markAsPaidAndGenerateChallan = async (memberId) => {
-        const member = formattedMembers.find(m => m.id === memberId);
+        const member = formattedMembers.find(m => m.member_id === memberId);
         if (!member) return;
 
         try {
@@ -256,10 +198,20 @@ const PaymentsPage = () => {
                 toast.error('Fee record not found for this member.');
                 return;
             }
-
+            const method = prompt("method of payment: ");
             // Mark the fee as paid using the fee ID
             console.log("Marking fee as paid with ID:", feeRecord.id);
-            await payFee(feeRecord);
+            // await payFee(feeRecord);
+            console.log(feeRecord)
+            await payFee({
+                member_id: feeRecord.member_id,
+                amount: Number(feeRecord.amount || 0),
+                month: selectedMonth,
+                year: selectedYear,
+                status: 'Paid',
+                paid_date: new Date().toISOString().split('T')[0],
+                method: method
+            })
 
             // Refresh fees
             const updatedFees = await getFees(selectedMonth, selectedYear);
@@ -271,19 +223,18 @@ const PaymentsPage = () => {
 
             const challan = {
                 id: challanId,
-                memberId: member.id,
+                memberId: member.member_id,
                 memberName: member.name,
                 phone: member.phone,
                 address: member.address || '',
-                amount: Number(member.feeAmount || 0),
+                amount: Number(member.amount || 0),
                 dueDate: member.nextPaymentDate || '',
                 paidDate,
+                paymentmethod: method,
                 createdAt: new Date().toISOString(),
             };
 
-            const challans = getChallans();
-            challans.unshift(challan);
-            saveChallans(challans);
+            await saveChallan(challan);
 
             toast.success('Payment marked as paid. Challan generated!');
             setSelectedChallan(challan);
@@ -295,7 +246,7 @@ const PaymentsPage = () => {
     };
 
     const filteredMembers = formattedMembers.filter(m => {
-        let matchesStatus = filterStatus === 'All' ? true : m.feeStatus === filterStatus;
+        let matchesStatus = filterStatus === 'All' ? true : m.status === filterStatus;
         return matchesStatus;
     });
 
@@ -344,6 +295,18 @@ const PaymentsPage = () => {
                         <span className="text-2xl font-bold text-white">{currentMonthLabel}</span>
                     </div>
                 </div>
+                <div className="fitzon-card bg-gradient-to-br from-[#111] to-[#1a0a0a] border-red-500/20 relative overflow-hidden group">
+                    <div className="flex justify-between items-start mb-2">
+                        <h3 className="text-gray-400 font-medium text-sm">Refunded Amount</h3>
+                        <div className="p-2 rounded-lg bg-red-500 bg-opacity-10">
+                            <AlertCircle className="w-5 h-5 text-red-500" />
+                        </div>
+                    </div>
+                    <div className="mt-2 group-hover:scale-105 transition-transform origin-left">
+                        <span className="text-4xl font-bebas text-white">Rs {refunded.toLocaleString()}</span>
+                    </div>
+                    <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-red-500 opacity-5 rounded-full blur-2xl"></div>
+                </div>
             </div>
 
             <div className="fitzon-card p-0 overflow-hidden">
@@ -388,8 +351,8 @@ const PaymentsPage = () => {
                             onChange={(e) => setFilterStatus(e.target.value)}
                         >
                             <option value="All">All Statuses</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Pending">Pending</option>
+                            <option value="paid">Paid</option>
+                            <option value="pending">Pending</option>
                         </select>
                     </div>
                 </div>
@@ -402,6 +365,7 @@ const PaymentsPage = () => {
                                 <th className="p-4 font-medium">Amount</th>
                                 <th className="p-4 font-medium">Due Date</th>
                                 <th className="p-4 font-medium">Status</th>
+                                <th className="p-4 font-medium">Payment Method</th>
                                 <th className="p-4 font-medium text-right">Action</th>
                             </tr>
                         </thead>
@@ -420,18 +384,21 @@ const PaymentsPage = () => {
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <span className="font-bebas text-lg tracking-wide">{formatRs(member.fee)}</span>
+                                        <span className="font-bebas text-lg tracking-wide">{formatRs(member.amount)}</span>
                                     </td>
-                                    <td className="p-4 text-gray-400">{member.feeStatus === 'Paid' ? member.paidDate : 'Overdue'}</td>
+                                    <td className="p-4 text-gray-400">{member.status === 'Paid' ? member.paidDate : 'Overdue'}</td>
                                     <td className="p-4">
-                                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${member.feeStatus === 'Paid' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}`}>
-                                            {member.feeStatus}
+                                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${member.status === 'Paid' || member.status === 'paid' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'}`}>
+                                            {member.status}
                                         </span>
                                     </td>
+                                    <td className="p-4">
+                                        <span className="font-bebas text-lg tracking-wide">{member.paymentmethod}</span>
+                                    </td>
                                     <td className="p-4 text-right">
-                                        {member.feeStatus === 'Pending' ? (
+                                        {member.status === 'Pending' || member.status === 'pending' ? (
                                             <button
-                                                onClick={() => markAsPaidAndGenerateChallan(member.id)}
+                                                onClick={() => markAsPaidAndGenerateChallan(member.member_id)}
                                                 className="btn-neon py-1.5 px-3 text-xs w-full sm:w-auto overflow-hidden whitespace-nowrap"
                                             >
                                                 <CreditCard className="w-4 h-4" />
@@ -439,8 +406,26 @@ const PaymentsPage = () => {
                                             </button>
                                         ) : (
                                             <span className="inline-flex items-center gap-2 text-gray-500 text-sm italic">
-                                                <CheckCircle2 className="w-4 h-4" />
-                                                Settled
+                                                <FileText className="w-4 h-4" />
+                                                Paid
+                                                {
+                                                    member.refund == "refunded" ? (
+                                                        <>
+                                                            <FileText className="w-4 h-4"></FileText>
+                                                            refunded
+                                                        </>
+                                                    ) : (
+                                                        <button onClick={async () => {
+                                                            await refund(member.member_id, selectedMonth, selectedYear);
+                                                            const updatedFees = await getFees(selectedMonth, selectedYear);
+                                                            setFees(updatedFees || []);
+
+                                                            toast.success("Refund successful");
+                                                        }} className="btn-neon py-1.5 px-3 text-xs w-full sm:w-auto">
+                                                            Refund
+                                                        </button>
+                                                    )
+                                                }
                                             </span>
                                         )}
                                     </td>
@@ -513,6 +498,12 @@ const PaymentsPage = () => {
                                     <div className="text-xs text-gray-500 uppercase tracking-wider">Amount Paid</div>
                                     <div className="text-neon font-bebas text-3xl mt-1">
                                         {formatRs(selectedChallan.amount)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider">Payment Method</div>
+                                    <div className="text-neon font-bebas text-3xl mt-1">
+                                        {selectedChallan.paymentmethod}
                                     </div>
                                 </div>
                                 <div className="text-right">
