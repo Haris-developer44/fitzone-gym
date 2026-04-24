@@ -18,8 +18,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 // app.get("/", (req, res) => {
 //   res.send("gym api is running");
-// })
-const upload = multer({ dest: "uploads/" });
+// // })
+// const upload = multer({ dest: "uploads/" });
+// const upload = multer({ dest: "/tmp/uploads" });
+const upload = multer({ storage: multer.memoryStorage() });
+const uploadDir = "/tmp/uploads";
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 //creating table for attendance
 // async function createTable(){
 //   const result  = await db.query(`CREATE TABLE attendance (
@@ -31,13 +38,18 @@ const upload = multer({ dest: "uploads/" });
 // );`)
 // }
 // Debug endpoint - Check database connection and fees
+
 async function uploadMedia(filePath) {
   const form = new FormData();
 
-  form.append("file", fs.createReadStream(filePath), {
-    filename: "challan.pdf",
-    contentType: "application/pdf" // 🔥 IMPORTANT
+  form.append("file", file.buffer, {
+    filename: file.originalname,
+    contentType: file.mimetype
   });
+  // form.append("file", fs.createReadStream(filePath), {
+  //   filename: "challan.pdf",
+  //   contentType: "application/pdf" // 🔥 IMPORTANT
+  // });
 
   form.append("messaging_product", "whatsapp");
 
