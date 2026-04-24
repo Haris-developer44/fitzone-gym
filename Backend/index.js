@@ -12,6 +12,7 @@ import cron from "node-cron";
 
 db.connect();
 const app = express();
+const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -731,6 +732,6 @@ app.post("/login", async (req, res) => {
   }
 })
 
-app.listen(3000, () => {
-  console.log("server is listening on ", 3000)
+app.listen(PORT, () => {
+  console.log("server is listening on ", PORT)
 })

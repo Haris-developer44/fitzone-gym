@@ -11,7 +11,8 @@ dotenv.config();
 //   port: process.env.DB_PORT
 // });
 const db = new pg.Client({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
 export default db;
