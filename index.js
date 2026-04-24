@@ -39,22 +39,47 @@ if (!fs.existsSync(uploadDir)) {
 // }
 // Debug endpoint - Check database connection and fees
 
-async function uploadMedia(filePath) {
+// async function uploadMedia(filePath) {
+//   const form = new FormData();
+
+//   form.append("file", file.buffer, {
+//     filename: file.originalname,
+//     contentType: file.mimetype
+//   });
+//   // form.append("file", fs.createReadStream(filePath), {
+//   //   filename: "challan.pdf",
+//   //   contentType: "application/pdf" // 🔥 IMPORTANT
+//   // });
+
+//   form.append("messaging_product", "whatsapp");
+
+//   const response = await axios.post(
+//     `https://graph.facebook.com/v22.0/1040915695774969/media`,
+//     form,
+//     {
+//       headers: {
+//         ...form.getHeaders(),
+//         Authorization: `Bearer ${process.env.WA_TOKEN}`,
+//       },
+//     }
+//   );
+
+//   return response.data.id;
+// }
+
+
+async function uploadMedia(file) {
   const form = new FormData();
 
   form.append("file", file.buffer, {
     filename: file.originalname,
-    contentType: file.mimetype
+    contentType: file.mimetype,
   });
-  // form.append("file", fs.createReadStream(filePath), {
-  //   filename: "challan.pdf",
-  //   contentType: "application/pdf" // 🔥 IMPORTANT
-  // });
 
   form.append("messaging_product", "whatsapp");
 
   const response = await axios.post(
-    `https://graph.facebook.com/v22.0/1040915695774969/media`,
+    "https://graph.facebook.com/v22.0/1040915695774969/media",
     form,
     {
       headers: {
@@ -66,6 +91,8 @@ async function uploadMedia(filePath) {
 
   return response.data.id;
 }
+
+
 async function sendWhatsApp(mediaId, phone) {
   console.log("sending message to whatsapp")
   await axios.post(
@@ -322,7 +349,7 @@ app.post("/attendance/:id", async (req, res) => {
     if (result.rows.length > 0) {
       res.status(200).json(result.rows[0]);
       console.log(nameObj.rows[0].name)
-      sendTextMessage(nameObj.rows[0].name);
+      sendTextMessage(nameObj.rows[0].name, "check_In", new Date().toLocaleString(), "923165491386");
     } else {
       res.status(404).json("student not found");
     }
@@ -572,6 +599,8 @@ app.post("/send-whatsapp", upload.single("file"), async (req, res) => {
   try {
     const file = req.file;
     const phone = req.body.phone;
+    console.log("file: ", file)
+    console.log("phone: ", phone)
 
     if (!file || !phone) {
       return res.status(400).json({ error: "File or phone missing" });
@@ -579,10 +608,18 @@ app.post("/send-whatsapp", upload.single("file"), async (req, res) => {
 
     // 🔥 Upload file → get media ID
     console.log("Uploading file to whatsapp server...")
-    const mediaId = await uploadMedia(file.path);
+    var mediaId;
+    try {
+
+      mediaId = await uploadMedia(file);
+      console.log("mediaId: ", mediaId)
+    } catch (err) {
+      console.log("file is not uploading")
+    }
 
     // 🔥 Send WhatsApp message
-    await sendWhatsApp(mediaId);
+
+    await sendWhatsApp(mediaId, '923165491386');
 
     // (optional) delete file after sending
     fs.unlinkSync(file.path);

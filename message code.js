@@ -45,7 +45,7 @@ const sendTextMessage = async (name, type, time, phone) => {
         to: phone,
         type: 'text',
         text: {
-          body: `*${type.toUpperCase()}* \n\n *Assalamualaikum*,${name}\n Your attendance is marked as Present at *${time}*\n\n Regards: *Fitzon Gym*`,
+          body: `*${type || ""}* \n\n *Assalamualaikum*,${name || ""}\n Your attendance is marked as Present at *${time}*\n\n Regards: *Fitzon Gym*`,
         }
       })
     })
