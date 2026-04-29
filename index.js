@@ -427,7 +427,6 @@ app.delete("/member/:id", async (req, res) => {
 app.all("/iclock/cdata", async (req, res) => {
   const body = req.body;
   console.log("req received for attendance");
-
   if (body && body.includes("\t")) {
     const fields = body.trim().split("\t");
     const record = {
@@ -454,10 +453,10 @@ app.all("/iclock/cdata", async (req, res) => {
     if (type === "check_in") {
       await db.query(
         `UPDATE attendance_sessions SET status='present', check_in=$1 WHERE user_id=$2`,
-        [record.timestamp || Date().now, record.userId]
+        [record.timestamp || new Date(), record.userId]
 
       );
-      sendTextMessage(nameObj.rows[0].name, type, record.timestamp, nameObj.rows[0].phone);
+      sendTextMessage(nameObj.rows[0].name, type, record.timestamp || new Date(), nameObj.rows[0].phone);
     }
 
     if (type === "check_out") {
@@ -467,7 +466,7 @@ app.all("/iclock/cdata", async (req, res) => {
      WHERE user_id = $2 AND check_out IS NULL`,
         [record.timestamp, record.userId]
       );
-      sendTextMessage(nameObj.rows[0].name, type, record.timestamp || Date().now(), nameObj.rows[0].phone);
+      sendTextMessage(nameObj.rows[0].name, type, record.timestamp || new Date(), nameObj.rows[0].phone);
     }
   }
   else {
