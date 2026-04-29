@@ -167,12 +167,12 @@ const syncDailyAttendance = async () => {
   try {
     const query = `
       INSERT INTO attendance (member_id, date, status)
-      SELECT id, CURRENT_DATE, 'absent'
+      SELECT id, $1, 'absent'
       FROM members
       WHERE status = 'Active'
       ON CONFLICT (member_id, date) DO NOTHING;
     `;
-    await db.query(query);
+    await db.query(query,[new Date()]);
     console.log("Daily attendance synced: Defaulted active members to 'absent'.");
   } catch (err) {
     console.error("Error syncing daily attendance:", err);
@@ -454,7 +454,7 @@ app.all("/iclock/cdata", async (req, res) => {
     if (type === "check_in") {
       await db.query(
         `UPDATE attendance_sessions SET status='present', check_in=$1 WHERE user_id=$2`,
-        [record.timestamp, record.userId]
+        [record.timestamp || Date().now, record.userId]
 
       );
       sendTextMessage(nameObj.rows[0].name, type, record.timestamp, nameObj.rows[0].phone);
@@ -467,7 +467,7 @@ app.all("/iclock/cdata", async (req, res) => {
      WHERE user_id = $2 AND check_out IS NULL`,
         [record.timestamp, record.userId]
       );
-      sendTextMessage(nameObj.rows[0].name, type, record.timestamp, nameObj.rows[0].phone);
+      sendTextMessage(nameObj.rows[0].name, type, record.timestamp || Date().now(), nameObj.rows[0].phone);
     }
   }
   else {
@@ -764,6 +764,7 @@ app.post("/login", async (req, res) => {
   console.log("password to login is: ", password);
   try {
     const result = await db.query("SELECT * FROM users WHERE email=$1", [email]);
+    console.log("result for login: ", result.rows);
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "user not found" });
     }
